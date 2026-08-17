@@ -1,0 +1,8 @@
+{
+  "name": "wallet-edge-os-prototype",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "test": "node --test prototype.test.js"
+  }
+}

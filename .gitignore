@@ -1,0 +1,8 @@
+# User-supplied source and local research artefacts
+*.pdf
+*.tar.gz
+
+# Local tooling
+.DS_Store
+node_modules/
+.vercel/
