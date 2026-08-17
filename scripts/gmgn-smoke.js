@@ -22,7 +22,7 @@ function classifyHealthResponse(status, payload) {
   if (status === 200 && payload && payload.code === 0 && Array.isArray(payload.data?.rank)) {
     return { ok: true, rankCount: payload.data.rank.length };
   }
-  return { ok: false, status: 502, reason: 'provider_rejected_request', providerStatus: status };
+  return { ok: false, status: 502, reason: 'provider_rejected_request', providerStatus: status, providerCode: payload?.code ?? null };
 }
 
 async function runSmoke() {
@@ -39,7 +39,7 @@ async function runSmoke() {
     payload = null;
   }
   const outcome = classifyHealthResponse(response.status, payload);
-  if (!outcome.ok) throw new Error(`GMGN smoke failed: ${outcome.reason} (HTTP ${outcome.providerStatus})`);
+  if (!outcome.ok) throw new Error(`GMGN smoke failed: ${outcome.reason} (HTTP ${outcome.providerStatus}, code ${outcome.providerCode})`);
   console.log(`GMGN_SMOKE_OK rank_count=${outcome.rankCount}`);
 }
 
