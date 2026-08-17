@@ -1,0 +1,12 @@
+# Keep the public deployment limited to the interactive prototype.
+*.pdf
+*.tar.gz
+.demand-validation-citations.json
+DECISIONS.md
+DEMAND-VALIDATION.md
+IDEA.md
+MVP-UX-SPEC.md
+NEXT.md
+PRODUCT-BRIEF.md
+RESEARCH.md
+THESIS.md
