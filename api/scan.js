@@ -19,7 +19,9 @@ function unwrap(payload) {
 
 function createHandler({ env = process.env, fetchImpl = fetch, now = Date.now, randomUUID = crypto.randomUUID } = {}) {
   return async function handler(req, res) {
-    res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
+    const cachePolicy = 's-maxage=60, stale-while-revalidate=120';
+    res.setHeader('Cache-Control', cachePolicy);
+    res.setHeader('Vercel-CDN-Cache-Control', cachePolicy);
     if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
     if (req.query && Object.keys(req.query).length) return res.status(400).json({ error: 'invalid_request' });
     if (!env.GMGN_API_KEY) return res.status(503).json(publicScanError());

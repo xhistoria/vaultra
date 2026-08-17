@@ -37,5 +37,5 @@ test('scan handler returns normalized live candidate evidence without provider c
   assert.equal(calls.length, 2);
   assert.equal(calls[0].options.headers['X-APIKEY'], 'test-secret');
   assert.doesNotMatch(calls[0].url, /test-secret/);
-  assert.equal(res.headers['Cache-Control'], 's-maxage=60, stale-while-revalidate=120');
+  assert.equal(res.headers['Vercel-CDN-Cache-Control'], 's-maxage=60, stale-while-revalidate=120');
 });
