@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "test": "node --test prototype.test.js"
+    "test": "node --test prototype.test.js scripts/gmgn-smoke.test.js",
+    "build": "node scripts/gmgn-smoke.js"
   }
 }
