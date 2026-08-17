@@ -1,4 +1,7 @@
 # Keep the public deployment limited to the interactive prototype.
+.env
+.env.*
+!.env.example
 *.pdf
 *.tar.gz
 .demand-validation-citations.json

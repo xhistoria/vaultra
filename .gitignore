@@ -2,6 +2,11 @@
 *.pdf
 *.tar.gz
 
+# Secrets and local provider configuration
+.env
+.env.*
+!.env.example
+
 # Local tooling
 .DS_Store
 node_modules/
