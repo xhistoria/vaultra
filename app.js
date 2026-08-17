@@ -7,13 +7,7 @@
   }
 
   function nextStateForDecision(decision) {
-    return ({
-      'Start paper track': 'Paper tracking',
-      'Keep active': 'Active',
-      Pause: 'Paused',
-      Drop: 'Dropped',
-      'Research further': 'Needs review',
-    })[decision] || 'Candidate';
+    return ({ 'Start paper track': 'Paper tracking', 'Keep active': 'Active', Pause: 'Paused', Drop: 'Dropped', 'Research further': 'Needs review' })[decision] || 'Candidate';
   }
 
   function paperTrackSummary(events) {
@@ -27,129 +21,63 @@
   if (typeof module !== 'undefined') module.exports = { normalizeCandidate, nextStateForDecision, paperTrackSummary };
   if (typeof document === 'undefined') return;
 
-  const wallet = {
-    label: 'Orbit',
-    address: '7Yk9…wDemo',
-    state: 'Paper tracking',
-    fit: 'Mixed fit',
-    confidence: 'Moderate',
-    assessed: '17 Aug 2026, 09:42 UTC',
-    note: 'Illustrative research data only — not current wallet activity.',
-    dimensions: [
-      { name: 'Repeatability', status: 'Mixed evidence', confidence: 'Moderate', summary: 'Observed history spans 14 tokens, but 41% of realised outcome is concentrated in two records.', evidence: '14 classifiable token records · 30D coverage', counter: 'Three records have incomplete attribution' },
-      { name: 'Execution style', status: 'Strong evidence', confidence: 'Moderate', summary: 'Observed holding band is mostly hours, with occasional faster activity.', evidence: 'Median observed hold: 11h 20m', counter: '4 of 22 events were under 30 minutes' },
-      { name: 'Cleanliness', status: 'Needs review', confidence: 'Low', summary: 'Incoming transfers cannot be fully separated from market entries in the current data sample.', evidence: '4 ambiguous incoming token events', counter: 'Coverage is incomplete; do not infer intent' },
-      { name: 'Independence', status: 'Insufficient data', confidence: 'Insufficient', summary: 'No conclusion is shown until a permissible funding-analysis source is available.', evidence: 'No licensed cluster dataset connected', counter: 'Manual review remains open' },
-      { name: 'Actionability', status: 'Mixed evidence', confidence: 'Moderate', summary: 'The style broadly matches an hours horizon; two observed events were detected too late for the stated profile.', evidence: '2 of 4 observed events had usable timing', counter: 'One event lacks a detection timestamp' },
-    ],
-  };
-
-  const trackEvents = [
-    { time: '17 Aug · 07:14 UTC', type: 'Observed swap', context: 'Source context available', usability: 'Yes', reason: 'Visible inside stated horizon', detected: '07:18 UTC' },
-    { time: '16 Aug · 18:41 UTC', type: 'Observed transfer', context: 'Attribution ambiguous', usability: 'Cannot assess', reason: 'Ambiguous transaction', detected: '18:48 UTC' },
-    { time: '16 Aug · 09:06 UTC', type: 'Observed swap', context: 'Context available', usability: 'No', reason: 'Detected too late', detected: '09:43 UTC' },
-    { time: '15 Aug · 15:28 UTC', type: 'Observed balance change', context: 'Detection time unavailable', usability: 'Cannot assess', reason: 'Cannot assess timing', detected: '—' },
-  ];
-
-  const state = { view: 'today', showAdd: false, detail: false, toast: '', candidate: null };
+  const state = { view: 'scan', selected: null, loading: true, error: '', scan: null, toast: '' };
   const root = document.getElementById('app');
-
-  const esc = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char]);
-  const badge = (text) => `<span class="badge badge-${text.toLowerCase().replace(/[^a-z]+/g, '-')}">${esc(text)}</span>`;
-  const icon = (name) => ({ today: '◷', wallets: '◎', tracks: '↗', review: '▤', profile: '◌' }[name] || '·');
+  const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char]);
+  const short = (value) => value ? `${value.slice(0, 5)}…${value.slice(-4)}` : '—';
+  const dollars = (value) => value === null || value === undefined ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
+  const pct = (value) => value === null || value === undefined ? '—' : `${(value * 100).toFixed(1)}%`;
+  const time = (value) => value ? new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+  const badge = (text) => `<span class="badge badge-${String(text).toLowerCase().replace(/[^a-z]+/g, '-')}">${esc(text)}</span>`;
 
   function shell(content) {
-    const nav = [
-      ['today', 'Today'], ['wallets', 'Wallets'], ['tracks', 'Paper tracks'], ['review', 'Weekly review'], ['profile', 'Profile & data'],
-    ].map(([key, label]) => `<button class="nav-item ${state.view === key ? 'active' : ''}" data-nav="${key}"><span aria-hidden="true">${icon(key)}</span>${label}</button>`).join('');
-    return `<div class="app-shell">
-      <aside class="sidebar"><div class="brand"><span class="brand-mark">V</span><span>Vault<span class="muted">ra</span></span></div>
-      <div class="workspace">RESEARCH WORKSPACE <strong>Solo / Solana</strong></div><nav aria-label="Primary">${nav}</nav>
-      <div class="sidebar-foot"><span class="status-dot"></span> Research-only MVP<br><small>Illustrative local prototype</small></div></aside>
-      <main><header class="topbar"><div><p class="eyebrow">SOLANA · MANUAL RESEARCH</p><p class="top-caption">Data shown is illustrative. No live chain feed connected.</p></div><button class="profile-chip" data-nav="profile" aria-label="Open profile and data settings">SM <span>Solo manual</span></button></header>
-      <section class="content">${content}</section></main></div>${state.showAdd ? addPanel() : ''}${state.toast ? `<div class="toast" role="status">${esc(state.toast)}</div>` : ''}`;
+    const nav = [['scan', 'Live scan'], ['boundary', 'Data boundary']].map(([key, label]) => `<button class="nav-item ${state.view === key ? 'active' : ''}" data-nav="${key}">${key === 'scan' ? '◷' : '◌'} ${label}</button>`).join('');
+    return `<div class="app-shell"><aside class="sidebar"><div class="brand"><span class="brand-mark">V</span><span>Vault<span class="muted">ra</span></span></div><div class="workspace">RESEARCH WORKSPACE <strong>Solana / read-only</strong></div><nav aria-label="Primary">${nav}</nav><div class="sidebar-foot"><span class="status-dot"></span> GMGN live scanner<br><small>No wallet connection · no trading</small></div></aside><main><header class="topbar"><div><p class="eyebrow">SOLANA · AUTOMATED CANDIDATE DISCOVERY</p><p class="top-caption">Live provider data is evidence for review, never a trade instruction.</p></div><button class="profile-chip" data-nav="boundary">Read-only</button></header><section class="content">${content}</section></main></div>${state.toast ? `<div class="toast" role="status">${esc(state.toast)}</div>` : ''}`;
   }
 
-  function today() {
-    return `<div class="page-head"><div><p class="eyebrow">17 AUG 2026</p><h1>Today</h1><p class="lede">A small queue of evidence changes that need your judgement.</p></div><button class="primary" data-action="open-add">Add a candidate <span>+</span></button></div>
-    <div class="notice"><strong>Research and recordkeeping only.</strong><span>This workspace does not execute trades or provide investment advice.</span></div>
-    <section class="split-grid"><div class="panel review-panel"><div class="panel-title"><div><p class="eyebrow">REVIEW QUEUE</p><h2>2 items need attention</h2></div>${badge('Moderate confidence')}</div>
-      <article class="review-card"><div class="card-top"><div><span class="wallet-dot"></span><strong>Orbit</strong> <span class="address">7Yk9…wDemo</span></div>${badge('Paper tracking')}</div><h3>Actionability needs review</h3><p>Two observations did not fit your stated hours horizon. One event has incomplete timing coverage.</p><div class="card-meta">Last observed 17 Aug · 07:14 UTC <button class="text-button" data-action="open-detail">Review evidence →</button></div></article>
-      <article class="review-card quiet"><div class="card-top"><div><span class="wallet-dot muted-dot"></span><strong>Harbor</strong> <span class="address">9s2…Lk8</span></div>${badge('Active')}</div><h3>Weekly review due</h3><p>No material change detected. Confirm, pause, or defer this research record.</p><div class="card-meta">Review due today <button class="text-button" data-nav="review">Open weekly review →</button></div></article>
-    </div>
-    <div class="panel signal-panel"><div class="panel-title"><div><p class="eyebrow">OBSERVATIONAL PAPER TRACK</p><h2>Orbit · day 3 of 7</h2></div><button class="secondary" data-nav="tracks">Open study</button></div>${trackEvents.slice(0, 3).map(eventRow).join('')}</div></section>
-    <section class="quiet-state"><span>◌</span><div><strong>Keep the queue small.</strong><p>Vaultra surfaces evidence changes and review work—not a stream of market activity.</p></div></section>`;
+  function scanner() {
+    if (state.loading) return `<div class="page-head"><div><p class="eyebrow">LIVE GMGN SCAN</p><h1>Finding candidates</h1><p class="lede">Requesting recent Smart Money buy activity and bounded 7D wallet surface evidence.</p></div></div><section class="panel"><p class="eyebrow">SCANNER STATUS</p><h2>Loading read-only data…</h2><p class="lede">No illustrative wallet records are shown while the scanner loads.</p></section>`;
+    if (state.error) return `<div class="page-head"><div><p class="eyebrow">LIVE GMGN SCAN</p><h1>Scanner unavailable</h1><p class="lede">${esc(state.error)}</p></div><button class="primary" data-action="refresh">Try again <span>↻</span></button></div><section class="notice"><strong>Fail-closed state.</strong><span>No fabricated results are substituted when the provider is unavailable.</span></section>`;
+    const candidates = state.scan?.candidates || [];
+    return `<div class="page-head"><div><p class="eyebrow">LIVE GMGN SCAN · SOLANA</p><h1>Candidate queue</h1><p class="lede">Recent Smart Money buys enriched with a bounded 7D surface filter. Updated ${time(state.scan?.generatedAt)}.</p></div><button class="primary" data-action="refresh">Refresh now <span>↻</span></button></div><div class="notice"><strong>Research only.</strong><span>${candidates.length} unique wallet candidates · auto-refreshes while this page is open · no trades or wallet actions.</span></div>${candidates.length ? `<div class="table-panel"><div class="table-head"><span>WALLET / LATEST OBSERVATION</span><span>SURFACE</span><span>REALIZED 7D</span><span>WIN RATE</span><span>TRADE SAMPLE</span></div>${candidates.map((candidate, index) => `<button class="table-row" data-action="open" data-index="${index}"><span><strong>${short(candidate.address)}</strong><small>BUY ${esc(candidate.token)} · ${dollars(candidate.observedAmountUsd)} · ${time(candidate.observedAt * 1000)}</small></span><span>${badge(candidate.surfaceState)}</span><span>${dollars(candidate.evidence.realizedProfit)}</span><span>${pct(candidate.evidence.winRate)}</span><span>${candidate.evidence.tradeCount ?? '—'} tx / ${candidate.evidence.tokenCount ?? '—'} tokens</span></button>`).join('')}</div>` : `<section class="panel"><p class="eyebrow">NO LIVE CANDIDATES</p><h2>No qualifying Smart Money buy records returned.</h2><p class="lede">This is inconclusive, not a positive or negative signal. Refresh later.</p></section>`}<section class="quiet-state"><span>◌</span><div><strong>How candidates are chosen.</strong><p>GMGN Smart Money buys are only discovery input. A “Surface pass” means the returned 7D metrics clear basic coverage thresholds; it does not verify funding, clusters, transfers, or future performance.</p></div></section>`;
   }
 
-  function wallets() {
-    const rows = [{ label: 'Orbit', state: 'Paper tracking', fit: 'Mixed fit', change: 'Actionability needs review', due: 'Today' }, { label: 'Harbor', state: 'Active', fit: 'Strong fit', change: 'No meaningful change', due: 'Today' }, { label: 'Haze', state: 'Needs review', fit: 'Unknown', change: 'Transfer attribution incomplete', due: '—' }, { label: 'Cedar', state: 'Paused', fit: 'Mixed fit', change: 'Paused by you', due: '—' }];
-    return `<div class="page-head"><div><p class="eyebrow">RESEARCH LIST</p><h1>Wallets</h1><p class="lede">12 total records · 1 active · research state is never a recommendation.</p></div><button class="primary" data-action="open-add">Add candidate <span>+</span></button></div>
-    <div class="filters"><label class="search"><span>⌕</span><input aria-label="Search wallets" placeholder="Search address, label, or note"></label><button class="filter active">All</button><button class="filter">Needs review</button><button class="filter">Paper tracking</button><button class="filter">Active</button></div>
-    <div class="table-panel"><div class="table-head"><span>WALLET</span><span>STATE</span><span>PROFILE FIT</span><span>LATEST MEANINGFUL CHANGE</span><span>NEXT REVIEW</span></div>${rows.map((row) => `<button class="table-row" data-action="open-detail"><span><strong>${row.label}</strong><small>${row.label === 'Orbit' ? '7Yk9…wDemo' : 'Public address masked'}</small></span><span>${badge(row.state)}</span><span>${badge(row.fit)}</span><span>${row.change}</span><span>${row.due}</span></button>`).join('')}</div>`;
+  function detail() {
+    const candidate = state.scan?.candidates?.[state.selected];
+    if (!candidate) return scanner();
+    const evidence = candidate.evidence;
+    const rows = [['Latest observed buy', `${candidate.token} · ${dollars(candidate.observedAmountUsd)} · ${time(candidate.observedAt * 1000)}`], ['Realized profit · 7D', dollars(evidence.realizedProfit)], ['Realized PnL ratio', pct(evidence.pnlRatio)], ['Win rate', pct(evidence.winRate)], ['Buy + sell count', evidence.tradeCount === null ? 'Not returned' : `${evidence.tradeCount} transactions`], ['Token diversity', evidence.tokenCount === null ? 'Not returned' : `${evidence.tokenCount} tokens`], ['GMGN tags', candidate.tags.length ? candidate.tags.join(', ') : 'Not returned']];
+    return `<div class="detail-head"><button class="back" data-action="close">← Back to live scan</button><div class="page-head compact"><div><p class="eyebrow">LIVE CANDIDATE · SURFACE REVIEW</p><h1><span class="wallet-dot"></span>${short(candidate.address)}</h1><p class="lede">Public Solana wallet · source: GMGN Smart Money activity + 7D portfolio stats.</p></div>${badge(candidate.surfaceState)}</div></div><div class="decision-band"><div><p class="eyebrow">CURRENT BOUNDARY</p><h2>This is a candidate for deeper review, not a watchlist approval.</h2><p>Funding/cluster independence, transfer attribution, full profit distribution, and 3–7 day actionability tracking are not inferred from this surface scan.</p></div></div><div class="score-grid">${rows.map(([label, value]) => `<article class="dimension"><div class="dimension-title"><h2>${esc(label)}</h2></div><p class="dimension-summary">${esc(value)}</p></article>`).join('')}</div><section class="ledger"><p class="eyebrow">NEXT EVIDENCE LAYERS</p><h2>Manual / deeper automation required</h2><p>Activity sampling, transfer-in analysis, creator history, cross-token repetition, funding-cluster checks, and paper tracking remain explicit next steps. Vaultra does not substitute a black-box score for missing evidence.</p></section>`;
   }
 
-  function scorecard() {
-    return `<div class="detail-head"><button class="back" data-action="close-detail">← Back to Today</button><div class="page-head compact"><div><p class="eyebrow">WALLET SCORECARD · ASSESSMENT V1</p><h1><span class="wallet-dot"></span> ${wallet.label} <span class="address">${wallet.address}</span></h1><p class="lede">Last assessed ${wallet.assessed} · ${wallet.note}</p></div>${badge(wallet.state)}</div></div>
-    <div class="decision-band"><div><p class="eyebrow">CURRENT DECISION</p><h2>Complete the paper track before deciding whether to keep this research record.</h2><p>Evidence is mixed and one cleanliness question remains unresolved.</p></div><button class="primary" data-nav="tracks">Open paper track</button></div>
-    <div class="score-grid">${wallet.dimensions.map((dimension) => `<article class="dimension"><div class="dimension-title"><h2>${dimension.name}</h2>${badge(dimension.status)}</div><p class="confidence">Evidence confidence: <strong>${dimension.confidence}</strong></p><p class="dimension-summary">${dimension.summary}</p><dl><div><dt>Observed</dt><dd>${dimension.evidence}</dd></div><div><dt>Uncertainty</dt><dd>${dimension.counter}</dd></div></dl><button class="text-button">View evidence ledger →</button></article>`).join('')}</div>
-    <section class="ledger"><div class="panel-title"><div><p class="eyebrow">PROFILE FIT</p><h2>Fits part of your stated research profile</h2></div>${badge('Mixed fit')}</div><p>Your selected response band is 30–120 minutes with an hours holding horizon. Observed events are compared to that profile only; this is not a suitability or performance claim.</p></section>`;
+  function boundary() {
+    return `<div class="page-head"><div><p class="eyebrow">DATA BOUNDARY</p><h1>Read-only, provider-backed research</h1><p class="lede">Vaultra uses GMGN OpenAPI from a server-side environment variable. The browser never receives the API key.</p></div></div><section class="profile-layout"><article class="data-boundary"><p class="eyebrow">CURRENT LIVE INPUTS</p><h2>Discovery + surface evidence</h2><p>Recent Smart Money buy records, then bounded 7D wallet statistics for unique candidates. Results are cached briefly to limit provider requests.</p></article><article class="data-boundary"><p class="eyebrow">NOT CONNECTED</p><h2>No trading capability</h2><p>No seed phrase, wallet private key, wallet signing, portfolio holdings, swap, order, or auto-copy execution is used. Funding and cluster independence remain unverified until a separate permissible evidence source is added.</p></article></section>`;
   }
 
-  function eventRow(event) {
-    const status = event.usability === 'Yes' ? 'Usable for stated horizon' : event.usability === 'No' ? 'Not usable' : 'Cannot assess';
-    return `<div class="event-row"><div class="event-time"><strong>${event.time}</strong><span>${event.detected === '—' ? 'Detection time unavailable' : `Detected ${event.detected}`}</span></div><div><strong>${event.type}</strong><span>${event.context}</span></div><div>${badge(status)}</div><button class="text-button" data-action="event-response">Review →</button></div>`;
+  function render() { root.innerHTML = shell(state.selected !== null ? detail() : state.view === 'boundary' ? boundary() : scanner()); }
+  function toast(message) { state.toast = message; render(); setTimeout(() => { state.toast = ''; render(); }, 2600); }
+  async function loadScan() {
+    state.loading = true; state.error = ''; render();
+    try {
+      const response = await fetch('/api/scan', { headers: { Accept: 'application/json' } });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || 'scanner request failed');
+      state.scan = payload; state.selected = null;
+    } catch (error) {
+      state.error = error.message === 'scanner_not_configured' ? 'The server-side scanner is not configured.' : 'The live provider could not return a scan. Try again later.';
+    } finally { state.loading = false; render(); }
   }
-
-  function tracks() {
-    const summary = paperTrackSummary(trackEvents);
-    return `<div class="page-head"><div><p class="eyebrow">OBSERVATIONAL STUDY</p><h1>Paper track: Orbit</h1><p class="lede">Day 3 of 7 · Started 15 Aug · profile snapshot saved</p></div>${badge('Paper tracking')}</div>
-    <div class="study-question"><p class="eyebrow">STUDY QUESTION</p><h2>Can future observed activity from this wallet be noticed and researched within your declared tracking profile?</h2><div class="study-rules"><span>Response band: 30–120 min</span><span>Holding horizon: hours</span><span>Not measuring: performance or trade outcome</span></div></div>
-    <div class="study-layout"><section class="timeline"><div class="panel-title"><div><p class="eyebrow">OBSERVATION TIMELINE</p><h2>4 qualifying observations</h2></div><button class="secondary" data-action="event-response">Record response</button></div>${trackEvents.map(eventRow).join('')}</section><aside class="study-summary"><p class="eyebrow">INTERIM FINDINGS</p><div class="summary-number">${summary.usableRate}<small>%</small></div><strong>usable for stated horizon</strong><dl><div><dt>Usable</dt><dd>${summary.usable}</dd></div><div><dt>Not usable</dt><dd>${summary.notUsable}</dd></div><div><dt>Cannot assess</dt><dd>${summary.cannotAssess}</dd></div></dl><p>One event lacks detection time and is excluded from latency measures.</p></aside></div>
-    <div class="closing"><div><p class="eyebrow">CLOSING REVIEW</p><h2>Available in 4 days</h2><p>You can end early, extend once, or keep recording observations. A study with no events is inconclusive—not positive or negative.</p></div><button class="secondary" data-action="toast" data-message="This local prototype records no live study changes.">End early</button></div>`;
-  }
-
-  function review() {
-    return `<div class="page-head"><div><p class="eyebrow">WEEKLY REVALIDATION</p><h1>Weekly review</h1><p class="lede">Compare evidence snapshots, record a human decision, and leave with a smaller clear queue.</p></div><button class="primary" data-action="toast" data-message="Review saved locally in this prototype.">Complete weekly review</button></div>
-    <section class="review-layout"><div><p class="eyebrow">MATERIAL CHANGE</p><article class="comparison"><div><strong>Orbit</strong>${badge('Actionability changed')}</div><h2>Observed timing is less consistent with your hours horizon.</h2><div class="comparison-grid"><div><span>Prior assessment</span><strong>Mixed evidence</strong><p>Historical band broadly matched.</p></div><div><span>Current observation</span><strong>Needs review</strong><p>2 of 4 observations were not usable; 1 cannot assess.</p></div></div><p class="provenance">Source coverage: 3/4 qualifying events have a detection time · Study day 3 of 7</p><div class="decision-actions"><button class="choice">Keep active</button><button class="choice active-choice">Continue / re-test</button><button class="choice">Pause</button><button class="choice">Drop</button></div></article></div><aside class="review-side"><p class="eyebrow">NO MEANINGFUL CHANGE</p><h2>Harbor</h2><p>No evidence delta is available for this period. You may keep, defer, or research further without fabricating a comparison.</p><button class="secondary">Open record</button></aside></section>`;
-  }
-
-  function profile() {
-    return `<div class="page-head"><div><p class="eyebrow">PROFILE & DATA</p><h1>Tracking profile</h1><p class="lede">Used only to compare observable wallet activity with your declared research workflow.</p></div></div><section class="profile-layout"><form class="profile-form"><label>Chain<select><option>Solana (MVP)</option></select></label><label>Response band<select><option>30–120 minutes</option><option>5–30 minutes</option><option>2+ hours</option></select></label><label>Holding horizon<select><option>Hours</option><option>Days</option><option>Minutes</option></select></label><label>Research focus<select><option>Swing · early runner</option><option>Discovery</option><option>Conviction</option></select></label><button class="primary" type="button" data-action="toast" data-message="Tracking profile saved locally.">Save profile</button></form><aside class="data-boundary"><p class="eyebrow">DATA BOUNDARY</p><h2>Public address only</h2><p>This prototype never asks for seed phrases, private keys, signatures, trading credentials, or portfolio balances.</p><button class="secondary">View provenance rules</button><hr><p class="muted">Live chain data is not connected. All displayed values are illustrative research data.</p></aside></section>`;
-  }
-
-  function addPanel() {
-    return `<div class="overlay" role="dialog" aria-modal="true" aria-labelledby="add-title"><form class="add-panel" id="candidate-form"><button class="close" type="button" data-action="close-add" aria-label="Close add candidate panel">×</button><p class="eyebrow">NEW RESEARCH RECORD</p><h2 id="add-title">Add a candidate</h2><p>Paste a public Solana address only. Never paste a seed phrase or private key.</p><label>Public Solana address<input id="candidate-address" required autocomplete="off" placeholder="Public address"></label><label>Optional label<input id="candidate-label" autocomplete="off" placeholder="e.g. Orbit"></label><div id="form-error" class="form-error" aria-live="polite"></div><div class="add-actions"><button class="secondary" type="button" data-action="close-add">Cancel</button><button class="primary" type="submit">Review candidate →</button></div></form></div>`;
-  }
-
-  function renderView() {
-    let content = state.detail ? scorecard() : state.view === 'wallets' ? wallets() : state.view === 'tracks' ? tracks() : state.view === 'review' ? review() : state.view === 'profile' ? profile() : today();
-    root.innerHTML = shell(content);
-  }
-
-  function toast(message) { state.toast = message; renderView(); setTimeout(() => { state.toast = ''; renderView(); }, 2600); }
 
   document.addEventListener('click', (event) => {
     const target = event.target.closest('[data-nav], [data-action]');
     if (!target) return;
-    if (target.dataset.nav) { state.view = target.dataset.nav; state.detail = false; renderView(); return; }
-    const action = target.dataset.action;
-    if (action === 'open-add') { state.showAdd = true; renderView(); }
-    if (action === 'close-add') { state.showAdd = false; renderView(); }
-    if (action === 'open-detail') { state.detail = true; renderView(); }
-    if (action === 'close-detail') { state.detail = false; renderView(); }
-    if (action === 'event-response') toast('Observation response is recorded as illustrative local data in this prototype.');
-    if (action === 'toast') toast(target.dataset.message || 'Saved locally in this prototype.');
+    if (target.dataset.nav) { state.view = target.dataset.nav; state.selected = null; render(); return; }
+    if (target.dataset.action === 'refresh') loadScan();
+    if (target.dataset.action === 'open') { state.selected = Number(target.dataset.index); render(); }
+    if (target.dataset.action === 'close') { state.selected = null; render(); }
   });
 
-  document.addEventListener('submit', (event) => {
-    if (event.target.id !== 'candidate-form') return;
-    event.preventDefault();
-    const candidate = normalizeCandidate(document.getElementById('candidate-address').value, document.getElementById('candidate-label').value);
-    const error = document.getElementById('form-error');
-    if (!candidate) { error.textContent = 'Enter one valid public Solana address. Secret-like input is not accepted.'; return; }
-    state.candidate = candidate; state.showAdd = false; state.detail = true; wallet.label = candidate.label; wallet.address = `${candidate.address.slice(0, 4)}…${candidate.address.slice(-4)}`; wallet.state = 'Candidate';
-    renderView(); toast('Candidate created locally. Review evidence before starting a paper track.');
-  });
-
-  renderView();
+  render();
+  loadScan();
+  setInterval(() => { if (!state.loading && state.view === 'scan' && state.selected === null) loadScan(); }, 90000);
 })();
