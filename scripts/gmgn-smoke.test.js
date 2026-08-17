@@ -18,5 +18,5 @@ test('returns only a sanitized success summary from a GMGN response', () => {
 
 test('does not expose provider response data when GMGN rejects a request', () => {
   const outcome = classifyHealthResponse(401, { code: 401, message: 'bad key', data: { apiKey: 'never-return' } });
-  assert.deepEqual(outcome, { ok: false, status: 502, reason: 'provider_rejected_request' });
+  assert.deepEqual(outcome, { ok: false, status: 502, reason: 'provider_rejected_request', providerStatus: 401 });
 });
