@@ -78,7 +78,7 @@
       <article class="review-card quiet"><div class="card-top"><div><span class="wallet-dot muted-dot"></span><strong>Harbor</strong> <span class="address">9s2…Lk8</span></div>${badge('Active')}</div><h3>Weekly review due</h3><p>No material change detected. Confirm, pause, or defer this research record.</p><div class="card-meta">Review due today <button class="text-button" data-nav="review">Open weekly review →</button></div></article>
     </div>
     <div class="panel signal-panel"><div class="panel-title"><div><p class="eyebrow">OBSERVATIONAL PAPER TRACK</p><h2>Orbit · day 3 of 7</h2></div><button class="secondary" data-nav="tracks">Open study</button></div>${trackEvents.slice(0, 3).map(eventRow).join('')}</div></section>
-    <section class="quiet-state"><span>◌</span><div><strong>Keep the queue small.</strong><p>Wallet Edge OS surfaces evidence changes and review work—not a stream of market activity.</p></div></section>`;
+    <section class="quiet-state"><span>◌</span><div><strong>Keep the queue small.</strong><p>Vaultra surfaces evidence changes and review work—not a stream of market activity.</p></div></section>`;
   }
 
   function wallets() {
