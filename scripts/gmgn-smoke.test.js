@@ -16,6 +16,11 @@ test('returns only a sanitized success summary from a GMGN response', () => {
   assert.deepEqual(outcome, { ok: true, rankCount: 2 });
 });
 
+test('accepts a successful GMGN envelope even when the provider omits a rank array', () => {
+  const outcome = classifyHealthResponse(200, { code: 0, data: {} });
+  assert.deepEqual(outcome, { ok: true, rankCount: null });
+});
+
 test('does not expose provider response data when GMGN rejects a request', () => {
   const outcome = classifyHealthResponse(401, { code: 401, message: 'bad key', data: { apiKey: 'never-return' } });
   assert.deepEqual(outcome, { ok: false, status: 502, reason: 'provider_rejected_request', providerStatus: 401, providerCode: 401 });

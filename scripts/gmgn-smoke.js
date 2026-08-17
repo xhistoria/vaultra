@@ -19,8 +19,8 @@ function buildHealthRequest({ apiKey, now = Date.now(), clientId = crypto.random
 }
 
 function classifyHealthResponse(status, payload) {
-  if (status === 200 && payload && payload.code === 0 && Array.isArray(payload.data?.rank)) {
-    return { ok: true, rankCount: payload.data.rank.length };
+  if (status === 200 && payload && payload.code === 0) {
+    return { ok: true, rankCount: Array.isArray(payload.data?.rank) ? payload.data.rank.length : null };
   }
   return { ok: false, status: 502, reason: 'provider_rejected_request', providerStatus: status, providerCode: payload?.code ?? null };
 }
