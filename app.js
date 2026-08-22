@@ -18,7 +18,15 @@
     return { total, usable, notUsable, cannotAssess, usableRate: total ? Math.round((usable / total) * 100) : 0 };
   }
 
-  if (typeof module !== 'undefined') module.exports = { normalizeCandidate, nextStateForDecision, paperTrackSummary };
+  function gmgnPortfolioUrl(chain, address) {
+    const supported = new Set(['sol', 'bsc', 'base', 'eth', 'robinhood', 'arc', 'stable']);
+    const network = String(chain || '').toLowerCase();
+    const wallet = String(address || '').trim();
+    if (!supported.has(network) || !wallet || /[\s<>"']/.test(wallet)) return null;
+    return `https://gmgn.ai/${network}/address/${encodeURIComponent(wallet)}`;
+  }
+
+  if (typeof module !== 'undefined') module.exports = { normalizeCandidate, nextStateForDecision, paperTrackSummary, gmgnPortfolioUrl };
   if (typeof document === 'undefined') return;
 
   const state = { view: 'scan', chain: 'sol', selected: null, loading: true, error: '', scan: null, toast: '' };
@@ -47,7 +55,8 @@
     if (!candidate) return scanner();
     const evidence = candidate.evidence;
     const rows = [['Latest observed buy', `${candidate.token} · ${dollars(candidate.observedAmountUsd)} · ${time(candidate.observedAt * 1000)}`], ['Realized profit · 7D', dollars(evidence.realizedProfit)], ['Realized PnL ratio', pct(evidence.pnlRatio)], ['Win rate', pct(evidence.winRate)], ['Buy + sell count', evidence.tradeCount === null ? 'Not returned' : `${evidence.tradeCount} transactions`], ['Token diversity', evidence.tokenCount === null ? 'Not returned' : `${evidence.tokenCount} tokens`], ['GMGN tags', candidate.tags.length ? candidate.tags.join(', ') : 'Not returned']];
-    return `<div class="detail-head"><button class="back" data-action="close">← Back to live scan</button><div class="page-head compact"><div><p class="eyebrow">LIVE CANDIDATE · SURFACE REVIEW</p><h1><span class="wallet-dot"></span>${short(candidate.address)}</h1><p class="lede">Public Solana wallet · source: GMGN Smart Money activity + 7D portfolio stats.</p></div>${badge(candidate.surfaceState)}</div></div><div class="decision-band"><div><p class="eyebrow">CURRENT BOUNDARY</p><h2>This is a candidate for deeper review, not a watchlist approval.</h2><p>Funding/cluster independence, transfer attribution, full profit distribution, and 3–7 day actionability tracking are not inferred from this surface scan.</p></div></div><div class="score-grid">${rows.map(([label, value]) => `<article class="dimension"><div class="dimension-title"><h2>${esc(label)}</h2></div><p class="dimension-summary">${esc(value)}</p></article>`).join('')}</div><section class="ledger"><p class="eyebrow">NEXT EVIDENCE LAYERS</p><h2>Manual / deeper automation required</h2><p>Activity sampling, transfer-in analysis, creator history, cross-token repetition, funding-cluster checks, and paper tracking remain explicit next steps. Vaultra does not substitute a black-box score for missing evidence.</p></section>`;
+    const portfolioUrl = gmgnPortfolioUrl(state.scan?.chain || state.chain, candidate.address);
+    return `<div class="detail-head"><button class="back" data-action="close">← Back to live scan</button><div class="page-head compact"><div><p class="eyebrow">LIVE CANDIDATE · SURFACE REVIEW</p><h1><span class="wallet-dot"></span>${short(candidate.address)}</h1><p class="lede">Public ${esc(state.scan?.chain || state.chain)} wallet · source: GMGN Smart Money activity + 7D portfolio stats.</p><div class="wallet-actions"><button class="secondary" data-action="copy-address" data-address="${esc(candidate.address)}">Copy wallet address</button>${portfolioUrl ? `<a class="secondary" href="${portfolioUrl}" target="_blank" rel="noopener noreferrer">Open portfolio in GMGN ↗</a>` : ''}</div></div>${badge(candidate.surfaceState)}</div></div><div class="decision-band"><div><p class="eyebrow">CURRENT BOUNDARY</p><h2>This is a candidate for deeper review, not a watchlist approval.</h2><p>Funding/cluster independence, transfer attribution, full profit distribution, and 3–7 day actionability tracking are not inferred from this surface scan.</p></div></div><div class="score-grid">${rows.map(([label, value]) => `<article class="dimension"><div class="dimension-title"><h2>${esc(label)}</h2></div><p class="dimension-summary">${esc(value)}</p></article>`).join('')}</div><section class="ledger"><p class="eyebrow">NEXT EVIDENCE LAYERS</p><h2>Manual / deeper automation required</h2><p>Activity sampling, transfer-in analysis, creator history, cross-token repetition, funding-cluster checks, and paper tracking remain explicit next steps. Vaultra does not substitute a black-box score for missing evidence.</p></section>`;
   }
 
   function boundary() {
@@ -78,6 +87,11 @@
     if (target.dataset.nav) { state.view = target.dataset.nav; state.selected = null; render(); return; }
     if (target.dataset.action === 'refresh') loadScan();
     if (target.dataset.action === 'open') { state.selected = Number(target.dataset.index); render(); }
+    if (target.dataset.action === 'copy-address') {
+      const address = target.dataset.address;
+      if (!navigator.clipboard) { toast('Copy is unavailable in this browser.'); return; }
+      navigator.clipboard.writeText(address).then(() => toast('Wallet address copied.')).catch(() => toast('Copy failed; select the address manually from GMGN.'));
+    }
     if (target.dataset.action === 'close') { state.selected = null; render(); }
   });
 
