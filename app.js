@@ -21,7 +21,7 @@
   if (typeof module !== 'undefined') module.exports = { normalizeCandidate, nextStateForDecision, paperTrackSummary };
   if (typeof document === 'undefined') return;
 
-  const state = { view: 'scan', selected: null, loading: true, error: '', scan: null, toast: '' };
+  const state = { view: 'scan', chain: 'sol', selected: null, loading: true, error: '', scan: null, toast: '' };
   const root = document.getElementById('app');
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char]);
   const short = (value) => value ? `${value.slice(0, 5)}…${value.slice(-4)}` : '—';
@@ -39,7 +39,7 @@
     if (state.loading) return `<div class="page-head"><div><p class="eyebrow">LIVE GMGN SCAN</p><h1>Finding candidates</h1><p class="lede">Requesting recent Smart Money buy activity and bounded 7D wallet surface evidence.</p></div></div><section class="panel"><p class="eyebrow">SCANNER STATUS</p><h2>Loading read-only data…</h2><p class="lede">No illustrative wallet records are shown while the scanner loads.</p></section>`;
     if (state.error) return `<div class="page-head"><div><p class="eyebrow">LIVE GMGN SCAN</p><h1>Scanner unavailable</h1><p class="lede">${esc(state.error)}</p></div><button class="primary" data-action="refresh">Try again <span>↻</span></button></div><section class="notice"><strong>Fail-closed state.</strong><span>No fabricated results are substituted when the provider is unavailable.</span></section>`;
     const candidates = state.scan?.candidates || [];
-    return `<div class="page-head"><div><p class="eyebrow">LIVE GMGN SCAN · SOLANA</p><h1>Candidate queue</h1><p class="lede">Recent Smart Money buys enriched with a bounded 7D surface filter. Updated ${time(state.scan?.generatedAt)}.</p></div><button class="primary" data-action="refresh">Refresh now <span>↻</span></button></div><div class="notice"><strong>Research only.</strong><span>${candidates.length} unique wallet candidates · auto-refreshes while this page is open · no trades or wallet actions.</span></div>${candidates.length ? `<div class="table-panel"><div class="table-head"><span>WALLET / LATEST OBSERVATION</span><span>SURFACE</span><span>REALIZED 7D</span><span>WIN RATE</span><span>TRADE SAMPLE</span></div>${candidates.map((candidate, index) => `<button class="table-row" data-action="open" data-index="${index}"><span><strong>${short(candidate.address)}</strong><small>BUY ${esc(candidate.token)} · ${dollars(candidate.observedAmountUsd)} · ${time(candidate.observedAt * 1000)}</small></span><span>${badge(candidate.surfaceState)}</span><span>${dollars(candidate.evidence.realizedProfit)}</span><span>${pct(candidate.evidence.winRate)}</span><span>${candidate.evidence.tradeCount ?? '—'} tx / ${candidate.evidence.tokenCount ?? '—'} tokens</span></button>`).join('')}</div>` : `<section class="panel"><p class="eyebrow">NO LIVE CANDIDATES</p><h2>No qualifying Smart Money buy records returned.</h2><p class="lede">This is inconclusive, not a positive or negative signal. Refresh later.</p></section>`}<section class="quiet-state"><span>◌</span><div><strong>How candidates are chosen.</strong><p>GMGN Smart Money buys are only discovery input. A “Surface pass” means the returned 7D metrics clear basic coverage thresholds; it does not verify funding, clusters, transfers, or future performance.</p></div></section>`;
+    return `<div class="page-head"><div><p class="eyebrow">LIVE GMGN SCAN · ${esc(state.scan?.chain || state.chain).toUpperCase()}</p><h1>Candidate queue</h1><p class="lede">Recent Smart Money buys enriched with a bounded 7D surface filter. Updated ${time(state.scan?.generatedAt)}.</p></div><div class="head-actions"><label class="chain-picker">Network<select id="chain-select"><option value="sol" ${state.chain === 'sol' ? 'selected' : ''}>Solana</option><option value="robinhood" ${state.chain === 'robinhood' ? 'selected' : ''}>Robinhood</option></select></label><button class="primary" data-action="refresh">Refresh now <span>↻</span></button></div></div><div class="notice"><strong>Research only.</strong><span>${candidates.length} unique wallet candidates · auto-refreshes while this page is open · no trades or wallet actions.</span></div>${candidates.length ? `<div class="table-panel"><div class="table-head"><span>WALLET / LATEST OBSERVATION</span><span>SURFACE</span><span>REALIZED 7D</span><span>WIN RATE</span><span>TRADE SAMPLE</span></div>${candidates.map((candidate, index) => `<button class="table-row" data-action="open" data-index="${index}"><span><strong>${short(candidate.address)}</strong><small>BUY ${esc(candidate.token)} · ${dollars(candidate.observedAmountUsd)} · ${time(candidate.observedAt * 1000)}</small></span><span>${badge(candidate.surfaceState)}</span><span>${dollars(candidate.evidence.realizedProfit)}</span><span>${pct(candidate.evidence.winRate)}</span><span>${candidate.evidence.tradeCount ?? '—'} tx / ${candidate.evidence.tokenCount ?? '—'} tokens</span></button>`).join('')}</div>` : `<section class="panel"><p class="eyebrow">NO LIVE CANDIDATES</p><h2>No qualifying Smart Money buy records returned.</h2><p class="lede">This is inconclusive, not a positive or negative signal. Refresh later.</p></section>`}<section class="quiet-state"><span>◌</span><div><strong>How candidates are chosen.</strong><p>GMGN Smart Money buys are only discovery input. A “Surface pass” means the returned 7D metrics clear basic coverage thresholds; it does not verify funding, clusters, transfers, or future performance.</p></div></section>`;
   }
 
   function detail() {
@@ -59,7 +59,7 @@
   async function loadScan() {
     state.loading = true; state.error = ''; render();
     try {
-      const response = await fetch('/api/scan', { headers: { Accept: 'application/json' } });
+      const response = await fetch(`/api/scan?chain=${encodeURIComponent(state.chain)}`, { headers: { Accept: 'application/json' } });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error || 'scanner request failed');
       state.scan = payload; state.selected = null;
@@ -67,6 +67,10 @@
       state.error = error.message === 'scanner_not_configured' ? 'The server-side scanner is not configured.' : 'The live provider could not return a scan. Try again later.';
     } finally { state.loading = false; render(); }
   }
+
+  document.addEventListener('change', (event) => {
+    if (event.target.id === 'chain-select') { state.chain = event.target.value; loadScan(); }
+  });
 
   document.addEventListener('click', (event) => {
     const target = event.target.closest('[data-nav], [data-action]');

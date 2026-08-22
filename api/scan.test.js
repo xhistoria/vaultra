@@ -33,9 +33,41 @@ test('scan handler returns normalized live candidate evidence without provider c
   const res = makeRes();
   await handler({ method: 'GET', query: {} }, res);
   assert.equal(res.statusCode, 200);
+  assert.equal(res.body.chain, 'sol');
   assert.equal(res.body.candidates[0].surfaceState, 'Surface pass');
   assert.equal(calls.length, 2);
+  assert.match(calls[0].url, /chain=sol/);
   assert.equal(calls[0].options.headers['X-APIKEY'], 'test-secret');
   assert.doesNotMatch(calls[0].url, /test-secret/);
   assert.equal(res.headers['Vercel-CDN-Cache-Control'], 's-maxage=60, stale-while-revalidate=120');
+});
+
+test('scan handler accepts Robinhood as an explicit GMGN chain', async () => {
+  const calls = [];
+  const handler = createHandler({
+    env: { GMGN_API_KEY: 'test-secret' },
+    randomUUID: () => 'fixed-client',
+    now: () => 1700000000000,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      if (url.includes('/v1/user/smartmoney')) return response(200, { code: 0, data: { list: [{ maker: '0xef90471fa80b1eb4226e2ea188fe4c013a920090', side: 'buy', amount_usd: 23, timestamp: 1700000100, base_address: '0x8ad25c65587979533fa1ca0d2194a76d5bae305d', base_token: { symbol: 'FLR' }, maker_info: { tags: ['smart_degen'] } }] } });
+      return response(200, { code: 0, data: [] });
+    },
+  });
+  const res = makeRes();
+  await handler({ method: 'GET', query: { chain: 'robinhood' } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.chain, 'robinhood');
+  assert.match(calls[0].url, /chain=robinhood/);
+  assert.match(calls[1].url, /chain=robinhood/);
+});
+
+test('scan handler rejects unsupported chains without calling GMGN', async () => {
+  let calls = 0;
+  const handler = createHandler({ env: { GMGN_API_KEY: 'test-secret' }, fetchImpl: async () => { calls += 1; } });
+  const res = makeRes();
+  await handler({ method: 'GET', query: { chain: 'bitcoin' } }, res);
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.body, { error: 'unsupported_chain' });
+  assert.equal(calls, 0);
 });
