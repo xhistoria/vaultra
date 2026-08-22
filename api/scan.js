@@ -58,7 +58,8 @@ function createHandler({ env = process.env, fetchImpl = fetch, now = Date.now, r
       });
       const persistenceResult = await persistence.persistScan({ chain, generatedAt: new Date(now()).toISOString(), candidates });
       return res.status(200).json({ source: 'GMGN OpenAPI', chain, generatedAt: new Date(now()).toISOString(), persistence: persistenceResult.status, candidates });
-    } catch {
+    } catch (error) {
+      console.error('scanner_error', error?.message || 'unknown');
       return res.status(502).json({ error: 'scanner_upstream_unavailable' });
     }
   };
