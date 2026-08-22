@@ -26,10 +26,27 @@
     return `https://gmgn.ai/${network}/address/${encodeURIComponent(wallet)}`;
   }
 
-  if (typeof module !== 'undefined') module.exports = { normalizeCandidate, nextStateForDecision, paperTrackSummary, gmgnPortfolioUrl };
+  function filterCandidates(candidates, { query = '', state = 'all', sort = 'newest' } = {}) {
+    const needle = String(query).trim().toLowerCase();
+    return [...(Array.isArray(candidates) ? candidates : [])]
+      .filter((candidate) => state === 'all' || candidate.surfaceState.toLowerCase().replace(/\s+/g, '-') === state)
+      .filter((candidate) => !needle || `${candidate.address} ${candidate.token} ${(candidate.tags || []).join(' ')}`.toLowerCase().includes(needle))
+      .sort((a, b) => sort === 'profit'
+        ? (b.evidence?.realizedProfit ?? -Infinity) - (a.evidence?.realizedProfit ?? -Infinity)
+        : (b.observedAt ?? 0) - (a.observedAt ?? 0));
+  }
+
+  function explorerUrl(chain, address) {
+    const wallet = String(address || '').trim();
+    if (!wallet) return null;
+    const bases = { sol: 'https://solscan.io/account/', robinhood: 'https://arbiscan.io/address/' };
+    return bases[String(chain || '').toLowerCase()] ? `${bases[String(chain).toLowerCase()]}${encodeURIComponent(wallet)}` : null;
+  }
+
+  if (typeof module !== 'undefined') module.exports = { normalizeCandidate, nextStateForDecision, paperTrackSummary, gmgnPortfolioUrl, filterCandidates, explorerUrl };
   if (typeof document === 'undefined') return;
 
-  const state = { view: 'scan', chain: 'sol', selected: null, loading: true, error: '', scan: null, toast: '' };
+  const state = { view: 'scan', chain: 'sol', filters: { query: '', state: 'all', sort: 'newest' }, selected: null, loading: true, error: '', scan: null, toast: '' };
   const root = document.getElementById('app');
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char]);
   const short = (value) => value ? `${value.slice(0, 5)}…${value.slice(-4)}` : '—';
@@ -46,17 +63,18 @@
   function scanner() {
     if (state.loading) return `<div class="page-head"><div><p class="eyebrow">LIVE GMGN SCAN</p><h1>Finding candidates</h1><p class="lede">Requesting recent Smart Money buy activity and bounded 7D wallet surface evidence.</p></div></div><section class="panel"><p class="eyebrow">SCANNER STATUS</p><h2>Loading read-only data…</h2><p class="lede">No illustrative wallet records are shown while the scanner loads.</p></section>`;
     if (state.error) return `<div class="page-head"><div><p class="eyebrow">LIVE GMGN SCAN</p><h1>Scanner unavailable</h1><p class="lede">${esc(state.error)}</p></div><button class="primary" data-action="refresh">Try again <span>↻</span></button></div><section class="notice"><strong>Fail-closed state.</strong><span>No fabricated results are substituted when the provider is unavailable.</span></section>`;
-    const candidates = state.scan?.candidates || [];
-    return `<div class="page-head"><div><p class="eyebrow">LIVE GMGN SCAN · ${esc(state.scan?.chain || state.chain).toUpperCase()}</p><h1>Candidate queue</h1><p class="lede">Recent Smart Money buys enriched with a bounded 7D surface filter. Updated ${time(state.scan?.generatedAt)}.</p></div><div class="head-actions"><label class="chain-picker">Network<select id="chain-select"><option value="sol" ${state.chain === 'sol' ? 'selected' : ''}>Solana</option><option value="robinhood" ${state.chain === 'robinhood' ? 'selected' : ''}>Robinhood</option></select></label><button class="primary" data-action="refresh">Refresh now <span>↻</span></button></div></div><div class="notice"><strong>Research only.</strong><span>${candidates.length} unique wallet candidates · auto-refreshes while this page is open · no trades or wallet actions.</span></div>${candidates.length ? `<div class="table-panel"><div class="table-head"><span>WALLET / LATEST OBSERVATION</span><span>SURFACE</span><span>REALIZED 7D</span><span>WIN RATE</span><span>TRADE SAMPLE</span></div>${candidates.map((candidate, index) => `<button class="table-row" data-action="open" data-index="${index}"><span><strong>${short(candidate.address)}</strong><small>BUY ${esc(candidate.token)} · ${dollars(candidate.observedAmountUsd)} · ${time(candidate.observedAt * 1000)}</small></span><span>${badge(candidate.surfaceState)}</span><span>${dollars(candidate.evidence.realizedProfit)}</span><span>${pct(candidate.evidence.winRate)}</span><span>${candidate.evidence.tradeCount ?? '—'} tx / ${candidate.evidence.tokenCount ?? '—'} tokens</span></button>`).join('')}</div>` : `<section class="panel"><p class="eyebrow">NO LIVE CANDIDATES</p><h2>No qualifying Smart Money buy records returned.</h2><p class="lede">This is inconclusive, not a positive or negative signal. Refresh later.</p></section>`}<section class="quiet-state"><span>◌</span><div><strong>How candidates are chosen.</strong><p>GMGN Smart Money buys are only discovery input. A “Surface pass” means the returned 7D metrics clear basic coverage thresholds; it does not verify funding, clusters, transfers, or future performance.</p></div></section>`;
+    const candidates = filterCandidates(state.scan?.candidates || [], state.filters);
+    return `<div class="page-head"><div><p class="eyebrow">LIVE GMGN SCAN · ${esc(state.scan?.chain || state.chain).toUpperCase()}</p><h1>Candidate queue</h1><p class="lede">Recent Smart Money buys enriched with a bounded 7D surface filter. Updated ${time(state.scan?.generatedAt)}.</p></div><div class="head-actions"><label class="chain-picker">Network<select id="chain-select"><option value="sol" ${state.chain === 'sol' ? 'selected' : ''}>Solana</option><option value="robinhood" ${state.chain === 'robinhood' ? 'selected' : ''}>Robinhood</option></select></label><button class="primary" data-action="refresh">Refresh now <span>↻</span></button></div></div><div class="notice"><strong>Research only.</strong><span>${candidates.length} visible of ${(state.scan?.candidates || []).length} live candidates · no trades or wallet actions.</span></div><div class="filters"><label class="search"><span>⌕</span><input id="candidate-search" aria-label="Search wallets or tokens" value="${esc(state.filters.query)}" placeholder="Search wallet or token"></label><label class="chain-picker">Evidence<select id="state-filter"><option value="all" ${state.filters.state === 'all' ? 'selected' : ''}>All</option><option value="surface-pass" ${state.filters.state === 'surface-pass' ? 'selected' : ''}>Surface pass</option><option value="needs-review" ${state.filters.state === 'needs-review' ? 'selected' : ''}>Needs review</option></select></label><label class="chain-picker">Sort<select id="sort-select"><option value="newest" ${state.filters.sort === 'newest' ? 'selected' : ''}>Newest</option><option value="profit" ${state.filters.sort === 'profit' ? 'selected' : ''}>Realized profit</option></select></label></div>${candidates.length ? `<div class="table-panel"><div class="table-head"><span>WALLET / LATEST OBSERVATION</span><span>SURFACE</span><span>REALIZED 7D</span><span>WIN RATE</span><span>TRADE SAMPLE</span></div>${candidates.map((candidate, index) => `<button class="table-row" data-action="open" data-index="${index}"><span><strong>${short(candidate.address)}</strong><small>BUY ${esc(candidate.token)} · ${dollars(candidate.observedAmountUsd)} · ${time(candidate.observedAt * 1000)}</small></span><span>${badge(candidate.surfaceState)}</span><span>${dollars(candidate.evidence.realizedProfit)}</span><span>${pct(candidate.evidence.winRate)}</span><span>${candidate.evidence.tradeCount ?? '—'} tx / ${candidate.evidence.tokenCount ?? '—'} tokens</span></button>`).join('')}</div>` : `<section class="panel"><p class="eyebrow">NO MATCHING CANDIDATES</p><h2>No wallets match the current filters.</h2><p class="lede">Clear the search or evidence filter, then try again.</p></section>`}<section class="quiet-state"><span>◌</span><div><strong>How candidates are chosen.</strong><p>GMGN Smart Money buys are only discovery input. A “Surface pass” means the returned 7D metrics clear basic coverage thresholds; it does not verify funding, clusters, transfers, or future performance.</p></div></section>`;
   }
 
   function detail() {
-    const candidate = state.scan?.candidates?.[state.selected];
+    const candidate = filterCandidates(state.scan?.candidates || [], state.filters)[state.selected];
     if (!candidate) return scanner();
     const evidence = candidate.evidence;
     const rows = [['Latest observed buy', `${candidate.token} · ${dollars(candidate.observedAmountUsd)} · ${time(candidate.observedAt * 1000)}`], ['Realized profit · 7D', dollars(evidence.realizedProfit)], ['Realized PnL ratio', pct(evidence.pnlRatio)], ['Win rate', pct(evidence.winRate)], ['Buy + sell count', evidence.tradeCount === null ? 'Not returned' : `${evidence.tradeCount} transactions`], ['Token diversity', evidence.tokenCount === null ? 'Not returned' : `${evidence.tokenCount} tokens`], ['GMGN tags', candidate.tags.length ? candidate.tags.join(', ') : 'Not returned']];
     const portfolioUrl = gmgnPortfolioUrl(state.scan?.chain || state.chain, candidate.address);
-    return `<div class="detail-head"><button class="back" data-action="close">← Back to live scan</button><div class="page-head compact"><div><p class="eyebrow">LIVE CANDIDATE · SURFACE REVIEW</p><h1><span class="wallet-dot"></span>${short(candidate.address)}</h1><p class="lede">Public ${esc(state.scan?.chain || state.chain)} wallet · source: GMGN Smart Money activity + 7D portfolio stats.</p><div class="wallet-actions"><button class="secondary" data-action="copy-address" data-address="${esc(candidate.address)}">Copy wallet address</button>${portfolioUrl ? `<a class="secondary" href="${portfolioUrl}" target="_blank" rel="noopener noreferrer">Open portfolio in GMGN ↗</a>` : ''}</div></div>${badge(candidate.surfaceState)}</div></div><div class="decision-band"><div><p class="eyebrow">CURRENT BOUNDARY</p><h2>This is a candidate for deeper review, not a watchlist approval.</h2><p>Funding/cluster independence, transfer attribution, full profit distribution, and 3–7 day actionability tracking are not inferred from this surface scan.</p></div></div><div class="score-grid">${rows.map(([label, value]) => `<article class="dimension"><div class="dimension-title"><h2>${esc(label)}</h2></div><p class="dimension-summary">${esc(value)}</p></article>`).join('')}</div><section class="ledger"><p class="eyebrow">NEXT EVIDENCE LAYERS</p><h2>Manual / deeper automation required</h2><p>Activity sampling, transfer-in analysis, creator history, cross-token repetition, funding-cluster checks, and paper tracking remain explicit next steps. Vaultra does not substitute a black-box score for missing evidence.</p></section>`;
+    const publicExplorerUrl = explorerUrl(state.scan?.chain || state.chain, candidate.address);
+    return `<div class="detail-head"><button class="back" data-action="close">← Back to live scan</button><div class="page-head compact"><div><p class="eyebrow">LIVE CANDIDATE · SURFACE REVIEW</p><h1><span class="wallet-dot"></span>${short(candidate.address)}</h1><div class="full-address"><code>${esc(candidate.address)}</code></div><p class="lede">Public ${esc(state.scan?.chain || state.chain)} wallet · source: GMGN Smart Money activity + 7D portfolio stats.</p><div class="wallet-actions"><button class="secondary" data-action="copy-address" data-address="${esc(candidate.address)}">Copy wallet address</button>${portfolioUrl ? `<a class="secondary" href="${portfolioUrl}" target="_blank" rel="noopener noreferrer">Open portfolio in GMGN ↗</a>` : ''}${publicExplorerUrl ? `<a class="secondary" href="${publicExplorerUrl}" target="_blank" rel="noopener noreferrer">Open explorer ↗</a>` : ''}</div></div>${badge(candidate.surfaceState)}</div></div><div class="decision-band"><div><p class="eyebrow">CURRENT BOUNDARY</p><h2>This is a candidate for deeper review, not a watchlist approval.</h2><p>Funding/cluster independence, transfer attribution, full profit distribution, and 3–7 day actionability tracking are not inferred from this surface scan.</p></div></div><div class="score-grid">${rows.map(([label, value]) => `<article class="dimension"><div class="dimension-title"><h2>${esc(label)}</h2></div><p class="dimension-summary">${esc(value)}</p></article>`).join('')}</div><section class="ledger"><p class="eyebrow">NEXT EVIDENCE LAYERS</p><h2>Manual / deeper automation required</h2><p>Activity sampling, transfer-in analysis, creator history, cross-token repetition, funding-cluster checks, and paper tracking remain explicit next steps. Vaultra does not substitute a black-box score for missing evidence.</p></section>`;
   }
 
   function boundary() {
@@ -77,8 +95,14 @@
     } finally { state.loading = false; render(); }
   }
 
+  document.addEventListener('input', (event) => {
+    if (event.target.id === 'candidate-search') { state.filters.query = event.target.value; render(); }
+  });
+
   document.addEventListener('change', (event) => {
-    if (event.target.id === 'chain-select') { state.chain = event.target.value; loadScan(); }
+    if (event.target.id === 'chain-select') { state.chain = event.target.value; state.filters = { query: '', state: 'all', sort: 'newest' }; loadScan(); }
+    if (event.target.id === 'state-filter') { state.filters.state = event.target.value; state.selected = null; render(); }
+    if (event.target.id === 'sort-select') { state.filters.sort = event.target.value; state.selected = null; render(); }
   });
 
   document.addEventListener('click', (event) => {
