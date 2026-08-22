@@ -35,8 +35,10 @@ test('scan handler returns normalized live candidate evidence without provider c
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.chain, 'sol');
   assert.equal(res.body.candidates[0].surfaceState, 'Surface pass');
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   assert.match(calls[0].url, /chain=sol/);
+  assert.match(calls[1].url, /period=7d/);
+  assert.match(calls[2].url, /period=30d/);
   assert.equal(calls[0].options.headers['X-APIKEY'], 'test-secret');
   assert.doesNotMatch(calls[0].url, /test-secret/);
   assert.equal(res.headers['Vercel-CDN-Cache-Control'], 's-maxage=60, stale-while-revalidate=120');
