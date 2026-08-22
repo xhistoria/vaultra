@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "test": "node --test prototype.test.js gmgn-links.test.js queue-logic.test.js api/score.test.js api/persistence.test.js scripts/gmgn-smoke.test.js api/scan-lib.test.js api/scan.test.js",
+    "test": "node --test prototype.test.js gmgn-links.test.js queue-logic.test.js api/score.test.js api/persistence.test.js scripts/gmgn-smoke.test.js api/scan-lib.test.js api/scan.test.js api/scan-robustness.test.js",
     "build": "node scripts/gmgn-smoke.js"
   }
 }

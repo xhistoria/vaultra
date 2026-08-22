@@ -46,7 +46,7 @@ function createHandler({ env = process.env, fetchImpl = fetch, now = Date.now, r
         ? unwrap(await (await fetchImpl(providerUrl('/v1/user/wallet_stats', { chain, wallet_address: addresses, period }, now, randomUUID), { headers })).json())
         : [];
       const stats7d = await fetchStats('7d');
-      const stats30d = await fetchStats('30d');
+      const stats30d = await fetchStats('30d').catch(() => []);
       const result = buildScanResult({ smartMoney: trades, stats: stats7d });
       const statsByAddress = (rows) => new Map((Array.isArray(rows) ? rows : [rows]).filter((row) => row?.wallet_address).map((row) => [row.wallet_address, row]));
       const sevenDay = statsByAddress(stats7d);
