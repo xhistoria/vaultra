@@ -18,6 +18,15 @@ function createPersistence({ env = process.env, fetchImpl = fetch } = {}) {
   }
 
   return {
+    async getPreviousSnapshots({ chain, addresses }) {
+      if (!baseUrl || !serviceKey || !addresses.length) return [];
+      try {
+        const params = new URLSearchParams({ select: 'wallet_address,score,evidence,created_at', chain: `eq.${chain}`, wallet_address: `in.(${addresses.join(',')})`, order: 'created_at.desc', limit: String(addresses.length * 2) });
+        const response = await fetchImpl(`${baseUrl}/rest/v1/wallet_snapshots?${params}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+        if (!response.ok) return [];
+        return await response.json();
+      } catch { return []; }
+    },
     async persistScan({ chain, generatedAt, candidates }) {
       if (!baseUrl || !serviceKey) return { status: 'not_configured' };
       try {

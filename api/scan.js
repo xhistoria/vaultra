@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const { buildScanResult, publicScanError } = require('./scan-lib.js');
 const { scoreCandidate } = require('./score.js');
 const { createPersistence } = require('./persistence.js');
+const { compareSnapshot } = require('./delta.js');
 
 function providerUrl(path, parameters, now, randomUUID) {
   const url = new URL(`https://openapi.gmgn.ai${path}`);
@@ -51,10 +52,13 @@ function createHandler({ env = process.env, fetchImpl = fetch, now = Date.now, r
       const statsByAddress = (rows) => new Map((Array.isArray(rows) ? rows : [rows]).filter((row) => row?.wallet_address).map((row) => [row.wallet_address, row]));
       const sevenDay = statsByAddress(stats7d);
       const thirtyDay = statsByAddress(stats30d);
+      const previousRows = persistence.getPreviousSnapshots ? await persistence.getPreviousSnapshots({ chain, addresses }) : [];
+      const previousByAddress = new Map();
+      for (const row of previousRows) if (!previousByAddress.has(row.wallet_address)) previousByAddress.set(row.wallet_address, row);
       const candidates = result.candidates.map((candidate) => {
         const stats7 = sevenDay.get(candidate.address) || null;
         const stats30 = thirtyDay.get(candidate.address) || null;
-        return { ...candidate, score: scoreCandidate({ stats7d: stats7, stats30d: stats30 }), evidence: { ...candidate.evidence, stats30dAvailable: Boolean(stats30), realizedProfit30d: stats30 ? Number(stats30.realized_profit) : null, winRate30d: stats30?.pnl_stat?.winrate ?? null } };
+        return { ...candidate, score: scoreCandidate({ stats7d: stats7, stats30d: stats30 }), change: compareSnapshot(previousByAddress.get(candidate.address), { score: scoreCandidate({ stats7d: stats7, stats30d: stats30 }) }), evidence: { ...candidate.evidence, stats30dAvailable: Boolean(stats30), realizedProfit30d: stats30 ? Number(stats30.realized_profit) : null, winRate30d: stats30?.pnl_stat?.winrate ?? null } };
       });
       const persistenceResult = await persistence.persistScan({ chain, generatedAt: new Date(now()).toISOString(), candidates });
       return res.status(200).json({ source: 'GMGN OpenAPI', chain, generatedAt: new Date(now()).toISOString(), persistence: persistenceResult.status, candidates });
